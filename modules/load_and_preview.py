@@ -10,14 +10,18 @@ def load_data(file):
         st.error("Unsupported file format. Please upload a CSV or Excel file.")
         return None
 
-def show_preview(df):
+def show_preview(df, uploaded_file):
     st.subheader("Dataset Overview")
+
+    st.subheader("Preview")
+    st.dataframe(df.head(10))
 
     col1, col2, col3 = st.columns(3)
 
     col1.metric("Rows", df.shape[0])
     col2.metric("Columns", df.shape[1])
-    col3.metric("File Size (MB)", round(df.memory_usage().sum()/(1024 * 1024), 2))
 
-    st.subheader("Preview")
-    st.dataframe(df.head())
+    file_size_mb = uploaded_file.size / (1024 * 1024)
+
+    col3.metric("File Size (MB)", round(file_size_mb, 2))
+

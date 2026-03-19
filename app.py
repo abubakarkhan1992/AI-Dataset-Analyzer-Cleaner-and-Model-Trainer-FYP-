@@ -6,7 +6,7 @@ from modules.load_and_preview import load_data, show_preview
 from modules.missing_values import analyze_missing
 from modules.duplicates import analyze_duplicates
 from modules.outliers import analyze_outliers
-from modules.inconsistency import detect_inconsistencies
+from modules.inconsistency import detect_inconsistencies, display_inconsistencies
 from modules.imbalance import detect_imbalance
 from modules.correlation import correlation_analysis
 from modules.quality_score import compute_quality_score
@@ -28,7 +28,7 @@ if uploaded_file:
 
     st.success("Dataset Loaded Successfully")
 
-    show_preview(df)
+    show_preview(df, uploaded_file)
 
     if st.button("Start Data Quality Analysis"):
         st.session_state.analysis_started = True
@@ -44,7 +44,8 @@ if uploaded_file:
         duplicate_metrics = analyze_duplicates(df)
 
         # Inconsistencies
-        inconsistency_count = detect_inconsistencies(df)
+        issues = display_inconsistencies(df)
+        inconsistency_count = len(issues)
 
         # Outliers
         outlier_metrics = analyze_outliers(df)

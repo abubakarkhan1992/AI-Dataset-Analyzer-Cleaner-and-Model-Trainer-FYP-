@@ -6,10 +6,26 @@ import streamlit as st
 
 def analyze_outliers(df):
 
-    numeric_df = df.select_dtypes(include=np.number)
+    numeric_df = df.select_dtypes(include=np.number).copy()
 
+    # Remove ID-like columns
+    cols_to_drop = []
+
+    for col in numeric_df.columns:
+
+        if "id" in col.lower():
+            cols_to_drop.append(col)
+
+        elif numeric_df[col].nunique() == len(df):
+            cols_to_drop.append(col)
+
+    numeric_df.drop(columns=cols_to_drop, inplace=True, errors="ignore")
+
+    st.subheader("Outlier Detection")
+
+    # Case 1: No numeric columns left
     if numeric_df.empty:
-        st.write("No numeric columns.")
+        st.info("No outliers detected.")
         return {"outlier_ratio": 0}
 
     outlier_counts = {}
@@ -32,15 +48,30 @@ def analyze_outliers(df):
         if count > 0:
             outlier_columns.append(col)
 
-    st.subheader("Outlier Detection")
-    st.dataframe(pd.DataFrame.from_dict(outlier_counts, orient="index", columns=["Outliers"]))
+    # Always show table
+    outlier_df = pd.DataFrame.from_dict(
+        outlier_counts,
+        orient="index",
+        columns=["Outlier Count"]
+    )
 
-    if outlier_columns:
-        fig, ax = plt.subplots(figsize=(10,6))
-        sns.boxplot(data=numeric_df[outlier_columns], ax=ax)
-        plt.xticks(rotation=45)
-        st.pyplot(fig)
+    st.dataframe(outlier_df)
 
+    # Case 2: No outliers found
+    if not outlier_columns:
+        st.success("No outliers detected in numeric columns.")
+        return {"outlier_ratio": 0}
+
+    # Case 3: Show boxplot if outliers exist
+    st.subheader("Outlier Visualization (Boxplot)")
+
+    fig, ax = plt.subplots(figsize=(10,6))
+    sns.boxplot(data=numeric_df[outlier_columns], ax=ax)
+    plt.xticks(rotation=45)
+
+    st.pyplot(fig)
+
+    # Calculate ratio
     total_outliers = sum(outlier_counts.values())
     total_values = numeric_df.size
 
