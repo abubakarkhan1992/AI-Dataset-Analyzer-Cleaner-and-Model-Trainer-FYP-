@@ -1,3 +1,19 @@
+import subprocess
+import time
+import requests
+
+# Start the FastAPI backend in the background
+def start_backend():
+    try:
+        # Check if the backend is already running
+        requests.get("http://127.0.0.1:8001/docs")
+    except:
+        # If not, start it using uvicorn
+        subprocess.Popen(["uvicorn", "main:app", "--port", "8001"]) 
+        time.sleep(2)  # Give it a moment to boot up
+
+start_backend()
+
 import streamlit as st
 import pandas as pd
 import requests
