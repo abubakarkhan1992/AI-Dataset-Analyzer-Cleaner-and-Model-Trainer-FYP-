@@ -236,3 +236,60 @@ def get_model_summary(results: Dict[str, Any]) -> Dict[str, Any]:
         summary['error'] = results['error']
     
     return summary
+
+
+def make_predictions(model: Any, input_data: pd.DataFrame) -> Dict[str, Any]:
+    """
+    Make predictions using a trained model.
+    
+    Args:
+        model: Trained model object
+        input_data: DataFrame with feature data (without target column)
+        
+    Returns:
+        Dictionary with predictions and probabilities (if classification)
+    """
+    try:
+        # Make predictions
+        predictions = model.predict(input_data)
+        
+        result = {
+            'predictions': predictions.tolist() if hasattr(predictions, 'tolist') else list(predictions),
+            'n_predictions': len(predictions)
+        }
+        
+        # If classification model, try to get prediction probabilities
+        if hasattr(model, 'predict_proba'):
+            try:
+                probabilities = model.predict_proba(input_data)
+                result['probabilities'] = probabilities.tolist()
+                result['classes'] = model.classes_.tolist() if hasattr(model, 'classes_') else None
+            except:
+                pass
+        
+        return result
+        
+    except Exception as e:
+        raise Exception(f"Prediction failed: {str(e)}")
+
+
+def get_feature_columns(model: Any) -> list:
+    """
+    Extract feature column names from a trained model.
+    
+    Args:
+        model: Trained model object
+        
+    Returns:
+        List of feature column names
+    """
+    try:
+        if hasattr(model, 'feature_names_in_'):
+            return model.feature_names_in_.tolist()
+        elif hasattr(model, 'n_features_in_'):
+            # If we don't have feature names, return generic names
+            return [f"feature_{i}" for i in range(model.n_features_in_)]
+        else:
+            return []
+    except:
+        return []

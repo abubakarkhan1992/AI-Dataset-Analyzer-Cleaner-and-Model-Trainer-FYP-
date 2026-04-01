@@ -21,7 +21,10 @@ from modules.automl_training import (
     detect_problem_type,
     train_automl_model,
     save_model_pickle,
-    get_model_summary
+    load_model_pickle,
+    get_model_summary,
+    make_predictions,
+    get_feature_columns
 )
 
 app = FastAPI(title="Dataset Analyser API")
@@ -520,4 +523,130 @@ async def download_trained_model_direct(file: UploadFile = File(...), target_col
         return JSONResponse(
             status_code=500,
             content={"error": f"Model training/download failed: {str(e)}"}
+        )
+
+# ==================== MODEL PREDICTION ENDPOINTS ====================
+
+@app.post("/train/test/{model_id}")
+async def test_model(model_id: str, file: UploadFile = File(...)):
+    """
+    Test a trained model by making predictions on provided data.
+    """
+    if not hasattr(app, 'trained_models') or model_id not in app.trained_models:
+        return JSONResponse(
+            status_code=404,
+            content={"error": "Model not found. Please train a model first."}
+        )
+    
+    try:
+        # Read test data
+        contents = await file.read()
+        if file.filename.endswith('.csv'):
+            test_df = pd.read_csv(io.BytesIO(contents))
+        else:
+            test_df = pd.read_excel(io.BytesIO(contents))
+        
+        # Get the trained model
+        model_data = app.trained_models[model_id]
+        model = model_data['model']
+        target_column = model_data['target_column']
+        
+        # Remove target column if it exists
+        if target_column in test_df.columns:
+            X_test = test_df.drop(columns=[target_column])
+        else:
+            X_test = test_df
+        
+        # Make predictions
+        predictions_data = make_predictions(model, X_test)
+        
+        return {
+            "status": "success",
+            "model_id": model_id,
+            "n_predictions": predictions_data['n_predictions'],
+            "predictions": predictions_data['predictions'][:10],  # Return first 10 for preview
+            "total_predictions": len(predictions_data['predictions']),
+            "probabilities": predictions_data.get('probabilities', [])[:10] if 'probabilities' in predictions_data else None,
+            "message": f"Made {len(predictions_data['predictions'])} predictions successfully"
+        }
+        
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={"error": f"Prediction failed: {str(e)}"}
+        )
+
+@app.post("/train/test/upload")
+async def test_model_upload(model_file: UploadFile = File(...), data_file: UploadFile = File(...)):
+    """
+    Test a previously saved pickle model by uploading both the model file and test data.
+    """
+    try:
+        # Read model pickle file
+        model_contents = await model_file.read()
+        import pickle as pkl
+        model = pkl.loads(model_contents)
+        
+        # Read test data
+        data_contents = await data_file.read()
+        if data_file.filename.endswith('.csv'):
+            test_df = pd.read_csv(io.BytesIO(data_contents))
+        else:
+            test_df = pd.read_excel(io.BytesIO(data_contents))
+        
+        # Use all columns as features (no target column to remove)
+        X_test = test_df
+        
+        # Make predictions
+        predictions_data = make_predictions(model, X_test)
+        
+        return {
+            "status": "success",
+            "n_predictions": predictions_data['n_predictions'],
+            "predictions": predictions_data['predictions'][:10],  # Return first 10 for preview
+            "total_predictions": len(predictions_data['predictions']),
+            "probabilities": predictions_data.get('probabilities', [])[:10] if 'probabilities' in predictions_data else None,
+            "message": f"Made {len(predictions_data['predictions'])} predictions successfully"
+        }
+        
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={"error": f"Model loading or prediction failed: {str(e)}"}
+        )
+
+@app.post("/train/test/sample/{model_id}")
+async def test_model_with_sample(model_id: str, sample_data: str = Form(...)):
+    """
+    Test a trained model with sample input data (JSON format).
+    """
+    if not hasattr(app, 'trained_models') or model_id not in app.trained_models:
+        return JSONResponse(
+            status_code=404,
+            content={"error": "Model not found. Please train a model first."}
+        )
+    
+    try:
+        # Parse sample data
+        data_dict = json.loads(sample_data)
+        sample_df = pd.DataFrame([data_dict])
+        
+        # Get the trained model
+        model_data = app.trained_models[model_id]
+        model = model_data['model']
+        
+        # Make prediction
+        predictions_data = make_predictions(model, sample_df)
+        
+        return {
+            "status": "success",
+            "prediction": predictions_data['predictions'][0] if predictions_data['predictions'] else None,
+            "probability": predictions_data.get('probabilities', [[]])[0] if 'probabilities' in predictions_data and predictions_data['probabilities'] else None,
+            "message": "Single prediction made successfully"
+        }
+        
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={"error": f"Prediction failed: {str(e)}"}
         )

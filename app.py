@@ -558,6 +558,104 @@ if uploaded_file:
                 
                 st.divider()
                 
+                # Test Model
+                st.subheader("Step 6: Test Model Predictions")
+                st.markdown("Test your trained model to verify it's working correctly before downloading.")
+                
+                test_tab1, test_tab2 = st.tabs(["📊 Test with Data File", "🔧 Test with Sample Values"])
+                
+                with test_tab1:
+                    st.write("Upload a dataset (without target column) to get predictions")
+                    test_file = st.file_uploader("Upload test dataset", type=["csv", "xlsx"], key="test_data_upload")
+                    
+                    if test_file and st.button("🔮 Make Predictions", key="predict_btn"):
+                        with st.spinner("Making predictions..."):
+                            try:
+                                model_id = st.session_state.trained_model_id
+                                files = {"file": (test_file.name, test_file.getvalue(),
+                                         "text/csv" if test_file.name.endswith('.csv') else 
+                                         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")}
+                                
+                                response = requests.post(f"{FASTAPI_URL}/train/test/{model_id}", files=files)
+                                response.raise_for_status()
+                                
+                                pred_result = response.json()
+                                st.success("✅ Predictions generated!")
+                                
+                                # Display results
+                                col1, col2, col3 = st.columns(3)
+                                with col1:
+                                    st.metric("Total Predictions", pred_result['total_predictions'])
+                                with col2:
+                                    st.metric("Preview Rows", len(pred_result['predictions']))
+                                with col3:
+                                    st.metric("Model", training_info.get("best_model", "Unknown"))
+                                
+                                st.divider()
+                                
+                                # Show predictions
+                                st.subheader("📈 Prediction Results (First 10 rows)")
+                                pred_df = pd.DataFrame({
+                                    "Prediction": pred_result['predictions']
+                                })
+                                st.dataframe(pred_df, use_container_width=True)
+                                
+                                # Show probabilities if classification
+                                if pred_result.get('probabilities') and len(pred_result['probabilities']) > 0:
+                                    st.subheader("📊 Prediction Probabilities (Classification)")
+                                    prob_df = pd.DataFrame(pred_result['probabilities'])
+                                    st.dataframe(prob_df, use_container_width=True)
+                                    
+                            except Exception as e:
+                                st.error(f"❌ Prediction failed: {str(e)}")
+                
+                with test_tab2:
+                    st.write("Enter sample values to get a single prediction")
+                    
+                    # Get feature info from training data
+                    feature_cols = [col for col in st.session_state.current_df.columns 
+                                   if col != training_info.get("target_column")]
+                    
+                    # Create input fields for each feature
+                    sample_values = {}
+                    for col in feature_cols:
+                        col_dtype = st.session_state.current_df[col].dtype
+                        if col_dtype in ['float64', 'float32', 'int64', 'int32']:
+                            sample_values[col] = st.number_input(f"{col}", 
+                                                                 value=float(st.session_state.current_df[col].mean()),
+                                                                 format="%.4f")
+                        else:
+                            unique_vals = st.session_state.current_df[col].unique().tolist()
+                            sample_values[col] = st.selectbox(f"{col}", unique_vals)
+                    
+                    if st.button("🎯 Get Prediction", key="single_pred_btn"):
+                        with st.spinner("Getting prediction..."):
+                            try:
+                                model_id = st.session_state.trained_model_id
+                                response = requests.post(
+                                    f"{FASTAPI_URL}/train/test/sample/{model_id}",
+                                    data={"sample_data": json.dumps(sample_values)}
+                                )
+                                response.raise_for_status()
+                                
+                                pred_result = response.json()
+                                st.success("✅ Prediction generated!")
+                                
+                                col1, col2 = st.columns(2)
+                                with col1:
+                                    st.metric("Predicted Value", str(pred_result['prediction']))
+                                
+                                if pred_result.get('probability'):
+                                    with col2:
+                                        st.write("**Class Probabilities**")
+                                        prob_text = ", ".join([f"{round(p, 4)}" for p in pred_result['probability']])
+                                        st.code(prob_text)
+                                
+                            except Exception as e:
+                                st.error(f"❌ Prediction failed: {str(e)}")
+                
+                st.divider()
+                
                 # Model Details
                 if st.checkbox("📋 Show Model Details"):
                     st.subheader("Model Configuration")
@@ -571,6 +669,72 @@ if uploaded_file:
                     })
             else:
                 st.info("📌 Click 'Train Model' to start the training process")
+
+        # ==================== LOAD & TEST SAVED MODEL ====================
+        with st.expander("📂 Load & Test Saved Model (Advanced)", expanded=False):
+            st.markdown("Upload a previously trained pickle model and test it with new data.")
+            
+            col_model, col_data = st.columns(2)
+            
+            with col_model:
+                st.write("**Upload Trained Model (Pickle File)**")
+                saved_model_file = st.file_uploader("Select .pkl file", type=["pkl"], key="saved_model_upload")
+            
+            with col_data:
+                st.write("**Upload Test Data**")
+                test_data_file = st.file_uploader("Select test dataset (CSV/XLSX)", type=["csv", "xlsx"], key="saved_model_test_data")
+            
+            if saved_model_file and test_data_file and st.button("🔮 Test Saved Model", key="test_saved_model_btn"):
+                with st.spinner("Testing saved model..."):
+                    try:
+                        files = {
+                            "model_file": (saved_model_file.name, saved_model_file.getvalue(), "application/octet-stream"),
+                            "data_file": (test_data_file.name, test_data_file.getvalue(),
+                                        "text/csv" if test_data_file.name.endswith('.csv') else 
+                                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                        }
+                        
+                        response = requests.post(f"{FASTAPI_URL}/train/test/upload", files=files)
+                        response.raise_for_status()
+                        
+                        pred_result = response.json()
+                        st.success("✅ Predictions generated!")
+                        
+                        # Display results
+                        col1, col2, col3 = st.columns(3)
+                        with col1:
+                            st.metric("Total Predictions", pred_result['total_predictions'])
+                        with col2:
+                            st.metric("Preview Rows", len(pred_result['predictions']))
+                        with col3:
+                            st.metric("Status", "Success")
+                        
+                        st.divider()
+                        
+                        # Show predictions
+                        st.subheader("📈 Prediction Results (First 10 Rows)")
+                        pred_df = pd.DataFrame({
+                            "Prediction": pred_result['predictions']
+                        })
+                        st.dataframe(pred_df, use_container_width=True)
+                        
+                        # Show probabilities if classification
+                        if pred_result.get('probabilities') and len(pred_result['probabilities']) > 0:
+                            st.subheader("📊 Prediction Probabilities (Classification)")
+                            prob_df = pd.DataFrame(pred_result['probabilities'])
+                            st.dataframe(prob_df, use_container_width=True)
+                        
+                        # Download predictions
+                        predictions_csv = pred_df.to_csv(index=False)
+                        st.download_button(
+                            label="⬇️ Download Predictions as CSV",
+                            data=predictions_csv,
+                            file_name=f"predictions_{Path(test_data_file.name).stem}.csv",
+                            mime="text/csv"
+                        )
+                        
+                    except Exception as e:
+                        st.error(f"❌ Prediction failed: {str(e)}")
 
 else:
     # Clear session state if a new file isn't uploaded
