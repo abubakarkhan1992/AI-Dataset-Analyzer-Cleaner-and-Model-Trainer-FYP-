@@ -228,12 +228,30 @@ if uploaded_file:
                 with st.spinner("Training... This may take a moment."):
                     uploaded_file.seek(0)
                     files = {"file": (uploaded_file.name, uploaded_file.getvalue(), "text/csv")}
-                    response = requests.post(f"{FASTAPI_URL}/train", files=files, data={"target_col": target_column})
+                    """response = requests.post(f"{FASTAPI_URL}/train", files=files, data={"target_col": target_column})
                     if response.ok:
                         result = response.json()
                         st.session_state.training_results = result
                         st.session_state.trained_model_id = result.get("model_id")
-                        st.success(f"Model Trained: {result['training_results']['best_model']}")
+                        st.success(f"Model Trained: {result['training_results']['best_model']}")"""
+                    response = requests.post(
+                    f"{FASTAPI_URL}/train",
+                    files=files,
+                    data={"target_col": target_column},
+                    timeout=300,)
+                
+                    st.write("Status code:", response.status_code)
+                    st.write("Response text:", response.text[:1000])
+                    
+                    if not response.ok:
+                        st.error(f"Training failed: {response.status_code} - {response.text}")
+                        st.stop()
+                    
+                    result = response.json()
+                    st.session_state.training_results = result
+                    st.session_state.trained_model_id = result.get("model_id")
+                    st.success("Model training finished")
+                    st.json(result)
             
             if st.session_state.get("training_results"):
                 mid = st.session_state.trained_model_id
